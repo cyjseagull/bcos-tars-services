@@ -5,6 +5,7 @@
 #include "Common.h"
 #include "Transaction.h"
 #include "TransactionImpl.h"
+#include "TransactionMetaDataImpl.h"
 #include "TransactionReceipt.h"
 #include "TransactionReceiptImpl.h"
 #include "bcos-framework/interfaces/crypto/CryptoSuite.h"
@@ -78,10 +79,13 @@ public:
             [m_inner = this->m_inner, _index]() { return &(m_inner->receipts[_index]); });
     };
 
-    bcos::crypto::HashType const& transactionHash(size_t _index) const override
+    TransactionMetaData::ConstPtr transactionMetaData(size_t _index) const override
     {
-        return *(reinterpret_cast<const bcos::crypto::HashType*>(
-            m_inner->transactionsHash[_index].data()));
+        if (transactionsMetaDataSize() <= index)
+        {
+            return nullptr;
+        }
+        return std::make_shared<TransactionMetaDataImpl>(m_inner->transactionsMetaData[_index]);
     }
 
     void setBlockType(bcos::protocol::BlockType _blockType) override
@@ -129,14 +133,19 @@ public:
                 ->inner());
     }
 
-    void appendTransactionHash(bcos::crypto::HashType const& _txHash) override
+    void appendTransactionMetaData(bcos::protocol::TransactionMetaData::Ptr _txMetaData) override
     {
-        m_inner->transactionsHash.emplace_back(_txHash.begin(), _txHash.end());
+        auto txMetaDataImpl =
+            std::dynamic_pointer_cast<bcostars::protocol::TransactionMetaDataImpl>(_txMetaData);
+        m_inner->transactionsMetaData.emplace_back(txMetaDataImpl->rawTxMetaData());
     }
 
     // get transactions size
     size_t transactionsSize() const override { return m_inner->transactions.size(); }
-    size_t transactionsHashSize() const override { return m_inner->transactionsHash.size(); }
+    size_t transactionsMetaDataSize() const override
+    {
+        return m_inner->transactionsMetaData.size();
+    }
     // get receipts size
     size_t receiptsSize() const override { return m_inner->receipts.size(); }
 
@@ -239,6 +248,17 @@ public:
     bcos::protocol::TransactionReceiptFactory::Ptr receiptFactory() override
     {
         return m_receiptFactory;
+    }
+
+    TransactionMetaData::Ptr createTransactionMetaData() override
+    {
+        return std::make_shared<TransactionMetaDataImpl>();
+    }
+
+    TransactionMetaData::Ptr createTransactionMetaData(
+        bcos::crypto::HashType const _hash, std::string const& _to) override
+    {
+        return std::make_shared<TransactionMetaDataImpl>(_hash, _to);
     }
 
 private:
